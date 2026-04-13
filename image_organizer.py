@@ -6,7 +6,7 @@ Scans a folder of images, identifies content via filename parsing and
 reverse image search APIs, generates a CSV mapping file for review,
 then executes the file organization based on approved mappings.
 
-Author: Claude (Anthropic) for Janice
+Author: Claude (Anthropic) for J. E. Flint
 Version: 1.0.0
 """
 
@@ -18,6 +18,7 @@ import re
 import shutil
 import hashlib
 import time
+import argparse
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, List, Tuple
@@ -895,7 +896,7 @@ class ImageOrganizer:
 
 def main():
     """Main entry point."""
-    import argparse
+ 
     
     parser = argparse.ArgumentParser(description='Organize images by content identification')
     parser.add_argument('--config', '-c', default='config.json', help='Path to config file')
