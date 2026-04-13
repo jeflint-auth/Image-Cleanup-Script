@@ -6,10 +6,11 @@ Scans a folder of images, identifies content via filename parsing and
 reverse image search APIs, generates a CSV mapping file for review,
 then executes the file organization based on approved mappings.
 
-Author: Claude (Anthropic) for J. E. Flint
+Author: J. E. Flint (with assistance from Claude/Anthropic)
 Version: 1.0.0
 """
 
+import argparse
 import os
 import sys
 import json
@@ -18,7 +19,6 @@ import re
 import shutil
 import hashlib
 import time
-import argparse
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, List, Tuple
@@ -34,6 +34,65 @@ def load_config(config_path: str = "config.json") -> dict:
     """Load configuration from JSON file."""
     with open(config_path, 'r', encoding='utf-8') as f:
         return json.load(f)
+
+
+def create_default_config(config_path: str = "config.json") -> None:
+    """Create a default config file with comments explaining each field."""
+    default_config = """{
+    // ===========================================
+    // IMAGE ORGANIZER CONFIGURATION
+    // ===========================================
+    // Edit the values below and remove these comment lines before running.
+    // JSON does not support comments, so delete all lines starting with //
+    // ===========================================
+    
+    // REQUIRED: Full path to your source folder containing images to organize
+    // Use double backslashes on Windows, e.g., "G:\\\\My Drive\\\\Images"
+    "source_directory": "YOUR_SOURCE_FOLDER_HERE",
+    
+    // REQUIRED: Full path to output folder for organized images
+    // This folder will be created if it doesn't exist
+    "output_directory": "YOUR_OUTPUT_FOLDER_HERE",
+    
+    // Name of the CSV mapping file (created in current directory)
+    "csv_output": "image_mapping.csv",
+    
+    // REQUIRED FOR API: Get your free API key at https://saucenao.com/user.php?page=search-api
+    // Free tier: 200 searches/day. Enhanced tier ($62/year): 5000 searches/day
+    // Leave as empty string "" to skip API lookups and use filename parsing only
+    "saucenao_api_key": "",
+    
+    // Minimum similarity threshold for API matches (0-100)
+    // Lower = more matches but less accurate. Recommended: 70-80
+    "min_similarity": 70.0
+}
+"""
+    # Write the commented version first for reference
+    with open(config_path + ".example", 'w', encoding='utf-8') as f:
+        f.write(default_config)
+    
+    # Write a clean JSON version (without comments) that's actually valid
+    clean_config = {
+        "source_directory": "YOUR_SOURCE_FOLDER_HERE",
+        "output_directory": "YOUR_OUTPUT_FOLDER_HERE", 
+        "csv_output": "image_mapping.csv",
+        "saucenao_api_key": "",
+        "min_similarity": 70.0
+    }
+    with open(config_path, 'w', encoding='utf-8') as f:
+        json.dump(clean_config, f, indent=4)
+    
+    print(f"Created default config file: {config_path}")
+    print(f"Created commented example:   {config_path}.example")
+    print()
+    print("Next steps:")
+    print("  1. Open config.json in a text editor")
+    print("  2. Set 'source_directory' to your images folder")
+    print("  3. Set 'output_directory' to where you want organized images")
+    print("  4. (Optional) Add your SauceNAO API key for reverse image search")
+    print("  5. Run this script again")
+    print()
+    print("See config.json.example for detailed explanations of each setting.")
 
 # =============================================================================
 # DATA STRUCTURES
@@ -896,8 +955,6 @@ class ImageOrganizer:
 
 def main():
     """Main entry point."""
- 
-    
     parser = argparse.ArgumentParser(description='Organize images by content identification')
     parser.add_argument('--config', '-c', default='config.json', help='Path to config file')
     parser.add_argument('--mode', '-m', choices=['scan', 'execute', 'full'], default='scan',
@@ -913,7 +970,8 @@ def main():
         config = load_config(args.config)
     except FileNotFoundError:
         print(f"Config file not found: {args.config}")
-        print("Please create a config.json file. See SETUP.md for instructions.")
+        print()
+        create_default_config(args.config)
         sys.exit(1)
     
     organizer = ImageOrganizer(config)
