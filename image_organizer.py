@@ -825,6 +825,7 @@ class ImageOrganizer:
         
         self.images: List[ImageInfo] = []
         self.existing_files: Dict[str, int] = {}
+        self.previously_processed: Dict[str, dict] = {}  # file_hash -> row data
         self.stats = {
             'total_scanned': 0,
             'filename_parsed': 0,
@@ -832,7 +833,34 @@ class ImageOrganizer:
             'unidentified': 0,
             'duplicates': 0,
             'errors': 0,
+            'skipped_existing': 0,
         }
+    
+    def load_existing_csv(self) -> None:
+        """Load existing CSV to skip already-processed files."""
+        if not self.csv_path.exists():
+            print("No existing CSV found. Starting fresh.")
+            return
+        
+        print(f"Loading existing CSV: {self.csv_path}")
+        try:
+            with open(self.csv_path, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    # Use file_hash as key since paths might change
+                    file_hash = row.get('file_hash', '')
+                    confidence = row.get('confidence', 'none')
+                    source = row.get('source', '')
+                    
+                    # Only skip if it was actually API-checked (has saucenao source)
+                    # or has high/medium confidence from filename parsing
+                    if file_hash and (source == 'saucenao' or confidence in ['high', 'medium']):
+                        self.previously_processed[file_hash] = row
+            
+            print(f"Loaded {len(self.previously_processed)} previously processed files.")
+        except Exception as e:
+            print(f"Warning: Could not load existing CSV: {e}")
+            print("Starting fresh.")
     
     def scan(self) -> None:
         """Scan source directory for images and other files."""
@@ -941,6 +969,7 @@ class ImageOrganizer:
         Use SauceNAO API to identify images that couldn't be parsed from filename.
         Set max_requests to limit API calls (0 = unlimited within daily quota).
         Skips non-image files (videos, PSDs, etc.)
+        Skips files that were already API-checked in a previous run.
         """
         if not self.config.get('saucenao_api_key'):
             print("No SauceNAO API key configured. Skipping API identification.")
@@ -953,10 +982,32 @@ class ImageOrganizer:
             and img.extension.lower() in self.IMAGE_EXTENSIONS
             and not img.origin_media.startswith('_other_files')
         ]
-        print(f"Attempting API identification for {len(unidentified)} images...")
+        
+        # Filter out files already processed in previous runs
+        needs_api = []
+        for img in unidentified:
+            if img.file_hash in self.previously_processed:
+                # Restore data from previous run
+                prev = self.previously_processed[img.file_hash]
+                img.artist = prev.get('artist', '')
+                img.characters = prev.get('characters', '').split('; ') if prev.get('characters') else []
+                img.series = prev.get('series', '')
+                img.origin_media = prev.get('origin_media', '')
+                img.confidence = prev.get('confidence', 'none')
+                img.source = prev.get('source', '')
+                img.notes = prev.get('notes', '')
+                img.rating = prev.get('rating', 'unknown')
+                img.needs_review = prev.get('needs_review', 'no') == 'yes'
+                self.stats['skipped_existing'] += 1
+            else:
+                needs_api.append(img)
+        
+        print(f"Attempting API identification for {len(needs_api)} images...")
+        if self.stats['skipped_existing'] > 0:
+            print(f"  (Skipped {self.stats['skipped_existing']} already processed from previous run)")
         
         requests_made = 0
-        for i, info in enumerate(unidentified):
+        for i, info in enumerate(needs_api):
             if max_requests > 0 and requests_made >= max_requests:
                 print(f"Reached max requests limit ({max_requests})")
                 break
@@ -1022,11 +1073,12 @@ class ImageOrganizer:
                 self.stats['unidentified'] += 1
             
             if (i + 1) % 10 == 0:
-                print(f"  API checked {i + 1}/{len(unidentified)} "
+                print(f"  API checked {i + 1}/{len(needs_api)} "
                       f"(remaining today: {self.saucenao.requests_remaining})")
         
         print(f"API identification complete. Identified: {self.stats['api_identified']}, "
-              f"Unidentified: {self.stats['unidentified']}")
+              f"Unidentified: {self.stats['unidentified']}, "
+              f"Skipped (previous run): {self.stats['skipped_existing']}")
     
     def build_paths(self) -> None:
         """Build destination paths for all images."""
@@ -1083,6 +1135,7 @@ class ImageOrganizer:
         print(f"Total images scanned:    {self.stats['total_scanned']}")
         print(f"Identified by filename:  {self.stats['filename_parsed']}")
         print(f"Identified by API:       {self.stats['api_identified']}")
+        print(f"Skipped (previous run):  {self.stats['skipped_existing']}")
         print(f"Unidentified:            {self.stats['unidentified']}")
         print(f"Errors:                  {self.stats['errors']}")
         print("=" * 50)
@@ -1161,6 +1214,9 @@ def main():
     organizer = ImageOrganizer(config)
     
     if args.mode in ['scan', 'full']:
+        # Load existing CSV to skip already-processed files
+        organizer.load_existing_csv()
+        
         # Scan phase
         organizer.scan()
         
