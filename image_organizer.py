@@ -210,6 +210,15 @@ class FilenameParser:
         'overwatch': ('video_games', 'Overwatch'),
         'league_of_legends': ('video_games', 'League of Legends'),
         'lol': ('video_games', 'League of Legends'),
+        # Video Game Companies (treat as video_games origin)
+        'capcom': ('video_games', 'Capcom'),
+        'nintendo': ('video_games', 'Nintendo'),
+        'sega': ('video_games', 'Sega'),
+        'konami': ('video_games', 'Konami'),
+        'snk': ('video_games', 'SNK'),
+        'namco': ('video_games', 'Namco'),
+        'square_enix': ('video_games', 'Square Enix'),
+        'squareenix': ('video_games', 'Square Enix'),
         
         # Comics - Marvel
         'marvel': ('comics', 'Marvel'),
@@ -291,6 +300,38 @@ class FilenameParser:
         'may': 'May',
         'baiken': 'Baiken',
         'i-no': 'I-No',
+        
+        # Marvel
+        'thanos': 'Thanos',
+        'deadpool': 'Deadpool',
+        'spider-man': 'Spider-Man',
+        'spiderman': 'Spider-Man',
+        'wolverine': 'Wolverine',
+        'iron_man': 'Iron Man',
+        'ironman': 'Iron Man',
+        'captain_america': 'Captain America',
+        'thor': 'Thor',
+        'hulk': 'Hulk',
+        'black_widow': 'Black Widow',
+        'hawkeye': 'Hawkeye',
+        'loki': 'Loki',
+        'venom': 'Venom',
+        'carnage': 'Carnage',
+        
+        # DC
+        'batman': 'Batman',
+        'superman': 'Superman',
+        'wonder_woman': 'Wonder Woman',
+        'aquaman': 'Aquaman',
+        'flash': 'The Flash',
+        'green_lantern': 'Green Lantern',
+        'joker': 'Joker',
+        'harley_quinn': 'Harley Quinn',
+        'catwoman': 'Catwoman',
+        'raven': 'Raven',
+        'starfire': 'Starfire',
+        'beast_boy': 'Beast Boy',
+        'robin': 'Robin',
     }
     
     def parse(self, filename: str) -> Dict:
@@ -399,12 +440,38 @@ class SauceNAOClient:
     
     BASE_URL = "https://saucenao.com/search.php"
     
+    # Series name aliases (Japanese → English localized names)
+    SERIES_ALIASES = {
+        'kyatto ninden teyandee': 'Samurai Pizza Cats',
+        'bishoujo senshi sailor moon': 'Sailor Moon',
+        'dragon ball z': 'Dragon Ball Z',
+        'dragon ball super': 'Dragon Ball Super',
+        'dragon ball gt': 'Dragon Ball GT',
+        'shingeki no kyojin': 'Attack on Titan',
+        'boku no hero academia': 'My Hero Academia',
+        'kimetsu no yaiba': 'Demon Slayer',
+        'jujutsu kaisen': 'Jujutsu Kaisen',
+        'one punch man': 'One Punch Man',
+        'fullmetal alchemist': 'Fullmetal Alchemist',
+        'hagane no renkinjutsushi': 'Fullmetal Alchemist',
+        'neon genesis evangelion': 'Evangelion',
+        'shin seiki evangelion': 'Evangelion',
+        'ranma 1/2': 'Ranma 1/2',
+        'rurouni kenshin': 'Rurouni Kenshin',
+        'samurai x': 'Rurouni Kenshin',
+        'tenchi muyou!': 'Tenchi Muyo',
+        'tenchi muyo': 'Tenchi Muyo',
+        'slayers': 'Slayers',
+        'card captor sakura': 'Cardcaptor Sakura',
+        'cardcaptor sakura': 'Cardcaptor Sakura',
+    }
+    
     def __init__(self, api_key: str, min_similarity: float = 70.0):
         self.api_key = api_key
         self.min_similarity = min_similarity
         self.requests_remaining = 200  # Free tier daily limit
         self.last_request_time = 0
-        self.request_interval = 6  # Seconds between requests (free tier)
+        self.request_interval = 12  # Seconds between requests (free tier needs ~10-12)
     
     def search(self, image_path: str) -> Optional[Dict]:
         """
@@ -496,12 +563,36 @@ class SauceNAOClient:
             if 'creator' in data:
                 parsed['artist'] = data['creator'] if isinstance(data['creator'], str) else ', '.join(data['creator'])
             if 'characters' in data:
-                if isinstance(data['characters'], list):
+                # Boorus return comma-separated character names - split them
+                if isinstance(data['characters'], str):
+                    # Split on comma and clean up each name
+                    chars = [c.strip() for c in data['characters'].split(',')]
+                    # Take first part before any parentheses for cleaner names
+                    chars = [c.split('(')[0].strip() for c in chars]
+                    # Remove empty strings and duplicates
+                    chars = list(dict.fromkeys([c for c in chars if c]))
+                    parsed['characters'] = chars
+                elif isinstance(data['characters'], list):
                     parsed['characters'] = data['characters']
-                else:
-                    parsed['characters'] = [data['characters']]
             if 'material' in data:
-                parsed['series'] = data['material'] if isinstance(data['material'], str) else ', '.join(data['material'])
+                # Clean up series name - take first one if multiple, remove parenthetical
+                if isinstance(data['material'], str):
+                    series_parts = data['material'].split(',')
+                    # Use first series, clean up
+                    series = series_parts[0].strip()
+                    # Capitalize nicely
+                    series = series.replace('_', ' ').title()
+                    # Apply aliases (Japanese → English)
+                    series_lower = series.lower()
+                    if series_lower in self.SERIES_ALIASES:
+                        series = self.SERIES_ALIASES[series_lower]
+                    parsed['series'] = series
+                else:
+                    series = data['material'][0].replace('_', ' ').title() if data['material'] else ''
+                    series_lower = series.lower()
+                    if series_lower in self.SERIES_ALIASES:
+                        series = self.SERIES_ALIASES[series_lower]
+                    parsed['series'] = series
             # Extract rating from booru data
             if 'rating' in data:
                 rating_map = {'s': 'safe', 'q': 'questionable', 'e': 'explicit'}
@@ -520,10 +611,14 @@ class SauceNAOClient:
             if 'creator' in data:
                 parsed['artist'] = data['creator'] if isinstance(data['creator'], str) else ', '.join(data['creator'])
             if 'characters' in data:
-                if isinstance(data['characters'], list):
+                # Boorus return comma-separated character names - split them
+                if isinstance(data['characters'], str):
+                    chars = [c.strip() for c in data['characters'].split(',')]
+                    chars = [c.split('(')[0].strip() for c in chars]
+                    chars = list(dict.fromkeys([c for c in chars if c]))
+                    parsed['characters'] = chars
+                elif isinstance(data['characters'], list):
                     parsed['characters'] = data['characters']
-                else:
-                    parsed['characters'] = [data['characters']]
             parsed['origin_media'] = 'furries'
             if 'rating' in data:
                 rating_map = {'s': 'safe', 'q': 'questionable', 'e': 'explicit'}
@@ -558,39 +653,48 @@ class PathBuilder:
         if info.rating in ['explicit', 'questionable']:
             parts.append('_nsfw')
         
-        # Top-level origin folder
-        origin = info.origin_media or '_unsorted'
-        if origin == '_unsorted':
-            # Try to categorize unsorted
-            if info.notes and 'anime' in info.notes.lower():
-                origin = '_unsorted/possibly_anime'
-            elif info.notes and 'furry' in info.notes.lower():
-                origin = '_unsorted/possibly_furry'
-            else:
-                origin = '_unsorted/unknown'
-        parts.append(origin)
+        # Check for crossover - multiple franchises detected
+        is_crossover = self._detect_crossover(info)
         
-        # Publisher (for comics) or skip
-        if info.publisher:
-            parts.append(self._sanitize_path(info.publisher))
-        
-        # Series
-        if info.series:
-            parts.append(self._sanitize_path(info.series))
-        
-        # Character folder
-        if info.characters:
-            if len(info.characters) == 1:
-                char_folder = self._sanitize_path(info.characters[0])
-            elif len(info.characters) == 2:
-                char_folder = self._sanitize_path(f"{info.characters[0]} & {info.characters[1]}")
-            else:
-                char_folder = "Group"
-            parts.append(char_folder)
-        
-        # Misc subfolder if no artist
-        if not info.artist and info.characters:
-            parts.append("Misc")
+        if is_crossover:
+            parts.append('crossovers')
+            # For crossovers, just use Group folder
+            if info.characters and len(info.characters) >= 2:
+                parts.append('Group')
+        else:
+            # Top-level origin folder
+            origin = info.origin_media or '_unsorted'
+            if origin == '_unsorted':
+                # Try to categorize unsorted
+                if info.notes and 'anime' in info.notes.lower():
+                    origin = '_unsorted/possibly_anime'
+                elif info.notes and 'furry' in info.notes.lower():
+                    origin = '_unsorted/possibly_furry'
+                else:
+                    origin = '_unsorted/unknown'
+            parts.append(origin)
+            
+            # Special handling for by_artist - add artist as subfolder
+            if origin == '_unsorted/by_artist' and info.artist:
+                parts.append(self._sanitize_path(info.artist))
+            
+            # Publisher (for comics) or skip
+            if info.publisher:
+                parts.append(self._sanitize_path(info.publisher))
+            
+            # Series
+            if info.series:
+                parts.append(self._sanitize_path(info.series))
+            
+            # Character folder
+            if info.characters:
+                if len(info.characters) == 1:
+                    char_folder = self._sanitize_path(info.characters[0])
+                elif len(info.characters) == 2:
+                    char_folder = self._sanitize_path(f"{info.characters[0]} & {info.characters[1]}")
+                else:
+                    char_folder = "Group"
+                parts.append(char_folder)
         
         # Build folder path
         folder_path = str(self.base_dir.joinpath(*parts))
@@ -599,6 +703,39 @@ class PathBuilder:
         filename = self._build_filename(info, folder_path, existing_files)
         
         return folder_path, filename
+    
+    def _detect_crossover(self, info: ImageInfo) -> bool:
+        """Detect if an image is a crossover between multiple franchises."""
+        # Known franchise keywords to check
+        franchise_groups = {
+            'capcom': ['cammy', 'chun-li', 'ryu', 'ken', 'street fighter', 'megaman', 'resident evil'],
+            'dc': ['batman', 'superman', 'wonder woman', 'flash', 'starfire', 'raven', 'robin', 'joker', 'dc comics'],
+            'marvel': ['spider', 'deadpool', 'wolverine', 'iron man', 'thor', 'hulk', 'avengers', 'thanos', 'venom'],
+            'nintendo': ['mario', 'zelda', 'link', 'samus', 'kirby', 'pokemon', 'pikachu'],
+            'sega': ['sonic', 'tails', 'knuckles', 'shadow'],
+            'konami': ['solid snake', 'metal gear', 'castlevania'],
+            'dragon_ball': ['goku', 'vegeta', 'gohan', 'piccolo', 'frieza', 'buu', 'majin'],
+            'doctor_who': ['doctor', 'tardis', 'dalek'],
+        }
+        
+        # Combine all text to search
+        search_text = ' '.join([
+            info.artist or '',
+            info.series or '',
+            ' '.join(info.characters) if info.characters else '',
+            info.description or ''
+        ]).lower()
+        
+        # Find which franchise groups are present
+        found_franchises = set()
+        for franchise, keywords in franchise_groups.items():
+            for keyword in keywords:
+                if keyword in search_text:
+                    found_franchises.add(franchise)
+                    break
+        
+        # If 2+ different franchises detected, it's a crossover
+        return len(found_franchises) >= 2
     
     def _build_filename(self, info: ImageInfo, folder_path: str, existing_files: Dict[str, int]) -> str:
         """Build the filename with proper incrementing."""
@@ -701,7 +838,15 @@ class ImageOrganizer:
         """Scan source directory for images and other files."""
         print(f"Scanning {self.source_dir}...")
         
+        # Get excluded folders from config
+        excluded_folders = self.config.get('excluded_folders', [])
+        if excluded_folders:
+            print(f"Excluding folders: {', '.join(excluded_folders)}")
+        
         for root, dirs, files in os.walk(self.source_dir):
+            # Skip excluded folders - modify dirs in-place to prevent descending
+            dirs[:] = [d for d in dirs if d not in excluded_folders]
+            
             for filename in files:
                 ext = os.path.splitext(filename)[1].lower()
                 filepath = os.path.join(root, filename)
@@ -832,7 +977,46 @@ class ImageOrganizer:
                 info.source = 'saucenao'
                 info.notes = result.get('source_url', '')
                 info.rating = result.get('rating', 'unknown')
-                info.needs_review = info.confidence != 'high'
+                
+                # Check if we only got artist (common with Pixiv results)
+                artist_only = info.artist and not info.series and not info.characters
+                
+                if artist_only:
+                    # Try filename parsing as fallback
+                    parsed = self.filename_parser.parse(info.filename)
+                    if parsed.get('series') or parsed.get('characters'):
+                        # Filename had useful info - use it
+                        if parsed.get('series'):
+                            info.series = parsed['series']
+                        if parsed.get('characters'):
+                            info.characters = parsed['characters']
+                        if parsed.get('origin_media'):
+                            info.origin_media = parsed['origin_media']
+                        info.notes = f"{info.notes}; Filename fallback used"
+                    else:
+                        # Still just artist - route to by_artist folder
+                        info.origin_media = '_unsorted/by_artist'
+                        info.needs_review = True
+                        info.notes = f"{info.notes}; Artist-only result from Pixiv"
+                
+                # Override origin_media for known comic characters
+                if info.characters:
+                    comic_chars = ['Thanos', 'Deadpool', 'Spider-Man', 'Spider-Gwen', 'Wolverine', 
+                                   'Iron Man', 'Captain America', 'Thor', 'Hulk', 'Venom', 'Carnage',
+                                   'Batman', 'Superman', 'Wonder Woman', 'Joker', 'Harley Quinn',
+                                   'Raven', 'Starfire', 'Beast Boy', 'Robin', 'Catwoman']
+                    for char in info.characters:
+                        if any(comic_char.lower() in char.lower() for comic_char in comic_chars):
+                            info.origin_media = 'comics'
+                            break
+                
+                # Check for non-ASCII characters in artist name (Japanese, Korean, Chinese, etc.)
+                has_non_ascii = info.artist and not info.artist.isascii()
+                if has_non_ascii:
+                    info.needs_review = True
+                    info.notes = f"{info.notes}; Non-English artist name - consider romanizing"
+                
+                info.needs_review = info.confidence != 'high' or artist_only or has_non_ascii
                 self.stats['api_identified'] += 1
             else:
                 self.stats['unidentified'] += 1
