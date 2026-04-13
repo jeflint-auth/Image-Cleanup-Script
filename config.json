@@ -1,10 +1,13 @@
 {
     "source_directory": "G:\\My Drive\\Images",
     "output_directory": "G:\\My Drive\\Worked Images",
-    "csv_output": "image_mapping.csv",
-    
-    "saucenao_api_key": "YOUR_API_KEY_HERE",
+   "csv_output": "image_mapping.csv",
+    "saucenao_api_key": "your_key_here",
     "min_similarity": 70.0,
-    
-    "notes": "Get your free SauceNAO API key at: https://saucenao.com/user.php?page=search-api"
-}
+    "excluded_folders": [
+        "Chronicles of Loth",
+        "Pacific Shores",
+        "Esper Fade",
+        "_projects",
+        "Commissions"
+    ]
